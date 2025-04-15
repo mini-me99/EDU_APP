@@ -21,6 +21,5 @@ export default defineConfig({
       'react-router-dom',
       'react-toastify'
     ]
-  },
-  base: '/EDU-APP/',
+  }
 })

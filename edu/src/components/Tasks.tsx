@@ -10,19 +10,16 @@ import {
   TextField,
   Button,
   Paper,
-  Checkbox,
   Grid,
-  Divider,
   Chip,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import { format, isToday, isAfter, isBefore, startOfDay, parseISO, isValid, isSameDay, addHours } from 'date-fns';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { format, isToday, isAfter, startOfDay, parseISO, isValid } from 'date-fns';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DatePicker, TimePicker } from '@mui/x-date-pickers';
 import { motion, AnimatePresence } from 'framer-motion';
-import AddIcon from '@mui/icons-material/Add';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
 interface Task {
   id: string;
@@ -32,43 +29,38 @@ interface Task {
   endTime: string;
   completed: boolean;
   createdAt: string;
+  completedAt?: string;
 }
 
 function Tasks() {
-  // Initialize tasks from localStorage
   const [tasks, setTasks] = useState<Task[]>(() => {
-    const storedTasks = localStorage.getItem('tasks');
-    if (storedTasks) {
-      try {
-        return JSON.parse(storedTasks);
-      } catch (error) {
-        console.error('Error parsing tasks from localStorage:', error);
-        return [];
-      }
+    try {
+      const storedTasks = localStorage.getItem('tasks');
+      return storedTasks ? JSON.parse(storedTasks) : [];
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+      return [];
     }
-    return [];
   });
 
   const [newTask, setNewTask] = useState({
     title: '',
     dueDate: new Date(),
     startTime: new Date(),
-    endTime: new Date(),
+    endTime: new Date(new Date().setHours(new Date().getHours() + 1)),
   });
 
-  // Save tasks to localStorage whenever they change
   useEffect(() => {
     try {
       localStorage.setItem('tasks', JSON.stringify(tasks));
     } catch (error) {
-      console.error('Error saving tasks to localStorage:', error);
+      console.error('Error saving tasks:', error);
     }
   }, [tasks]);
 
   const handleAddTask = () => {
     if (!newTask.title.trim()) return;
 
-    // Create a new task with proper date formatting
     const task: Task = {
       id: Date.now().toString(),
       title: newTask.title.trim(),
@@ -79,37 +71,40 @@ function Tasks() {
       createdAt: new Date().toISOString(),
     };
 
-    // Add the task to the list
-    setTasks(prevTasks => [...prevTasks, task]);
-
-    // Reset the form
+    setTasks(prev => [...prev, task]);
     setNewTask({
       title: '',
       dueDate: new Date(),
       startTime: new Date(),
-      endTime: new Date(),
+      endTime: new Date(new Date().setHours(new Date().getHours() + 1)),
     });
   };
 
   const handleToggleTask = (id: string) => {
-    setTasks(tasks.map(task =>
-      task.id === id ? { ...task, completed: !task.completed } : task
-    ));
+    setTasks(prev => 
+      prev.map(task => {
+        if (task.id === id) {
+          return {
+            ...task,
+            completed: !task.completed,
+            completedAt: !task.completed ? new Date().toISOString() : undefined
+          };
+        }
+        return task;
+      })
+    );
   };
 
   const handleDeleteTask = (id: string) => {
-    setTasks(tasks.filter(task => task.id !== id));
+    setTasks(prev => prev.filter(task => task.id !== id));
   };
 
   const formatDate = (dateString: string) => {
     try {
       const date = parseISO(dateString);
-      if (!isValid(date)) {
-        return 'Invalid date';
-      }
-      return format(date, 'MMM dd, yyyy');
+      return isValid(date) ? format(date, 'MMM dd, yyyy') : 'Invalid date';
     } catch (error) {
-      console.error('Error formatting date:', dateString);
+      console.error('Error formatting date:', error);
       return 'Invalid date';
     }
   };
@@ -117,10 +112,7 @@ function Tasks() {
   const isTaskDueToday = (task: Task) => {
     try {
       const taskDate = parseISO(task.dueDate);
-      const now = new Date();
-      
-      // Only show tasks that are explicitly set for today
-      return isSameDay(taskDate, now);
+      return isToday(taskDate);
     } catch (error) {
       console.error('Error checking if task is due today:', error);
       return false;
@@ -130,28 +122,84 @@ function Tasks() {
   const isTaskUpcoming = (task: Task) => {
     try {
       const taskDate = parseISO(task.dueDate);
-      const now = new Date();
-      
-      // Show tasks that are set for future dates
-      return isAfter(taskDate, now) && !isSameDay(taskDate, now);
+      const today = startOfDay(new Date());
+      return isAfter(taskDate, today) && !isToday(taskDate);
     } catch (error) {
       console.error('Error checking if task is upcoming:', error);
       return false;
     }
   };
 
-  // Filter tasks based on their due dates
-  const todayTasks = tasks.filter(task => 
-    !task.completed && 
-    isTaskDueToday(task)
-  );
+  const todayTasks = tasks.filter(task => !task.completed && isTaskDueToday(task));
+  const upcomingTasks = tasks.filter(task => !task.completed && isTaskUpcoming(task));
+  const completedTasks = tasks
+    .filter(task => task.completed)
+    .sort((a, b) => {
+      const dateA = a.completedAt ? new Date(a.completedAt) : new Date(a.createdAt);
+      const dateB = b.completedAt ? new Date(b.completedAt) : new Date(b.createdAt);
+      return dateB.getTime() - dateA.getTime();
+    });
 
-  const upcomingTasks = tasks.filter(task => 
-    !task.completed && 
-    isTaskUpcoming(task)
+  const renderTaskList = (taskList: Task[], emptyMessage: string) => (
+    <List>
+      <AnimatePresence>
+        {taskList.length > 0 ? (
+          taskList.map((task) => (
+            <motion.div
+              key={task.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ListItem>
+                <ListItemText
+                  primary={task.title}
+                  secondary={
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                      <Chip
+                        size="small"
+                        label={`${task.startTime} - ${task.endTime}`}
+                        icon={<AccessTimeIcon />}
+                      />
+                      <Chip
+                        size="small"
+                        label={formatDate(task.dueDate)}
+                        color="primary"
+                      />
+                      {task.completedAt && (
+                        <Chip
+                          size="small"
+                          label={`Completed: ${formatDate(task.completedAt)}`}
+                          color="success"
+                        />
+                      )}
+                    </Box>
+                  }
+                />
+                <ListItemSecondaryAction>
+                  <IconButton
+                    edge="end"
+                    onClick={() => handleToggleTask(task.id)}
+                    color={task.completed ? 'success' : 'default'}
+                  >
+                    <CheckCircleIcon />
+                  </IconButton>
+                  <IconButton edge="end" onClick={() => handleDeleteTask(task.id)}>
+                    <DeleteIcon />
+                  </IconButton>
+                </ListItemSecondaryAction>
+              </ListItem>
+            </motion.div>
+          ))
+        ) : (
+          <ListItem>
+            <ListItemText primary={emptyMessage} />
+          </ListItem>
+        )}
+      </AnimatePresence>
+    </List>
   );
-
-  const completedTasks = tasks.filter(task => task.completed);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -223,57 +271,7 @@ function Tasks() {
             <Typography variant="h6" gutterBottom>
               Today's Tasks
             </Typography>
-            <List>
-              <AnimatePresence>
-                {todayTasks.length > 0 ? (
-                  todayTasks.map((task) => (
-                    <motion.div
-                      key={task.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <ListItem>
-                        <ListItemText
-                          primary={task.title}
-                          secondary={
-                            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                              <Chip
-                                size="small"
-                                label={`${task.startTime} - ${task.endTime}`}
-                                icon={<AccessTimeIcon />}
-                              />
-                              <Chip
-                                size="small"
-                                label={formatDate(task.dueDate)}
-                                color="primary"
-                              />
-                            </Box>
-                          }
-                        />
-                        <ListItemSecondaryAction>
-                          <IconButton
-                            edge="end"
-                            onClick={() => handleToggleTask(task.id)}
-                            color={task.completed ? 'success' : 'default'}
-                          >
-                            <CheckCircleIcon />
-                          </IconButton>
-                          <IconButton edge="end" onClick={() => handleDeleteTask(task.id)}>
-                            <DeleteIcon />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                    </motion.div>
-                  ))
-                ) : (
-                  <ListItem>
-                    <ListItemText primary="No tasks for today" />
-                  </ListItem>
-                )}
-              </AnimatePresence>
-            </List>
+            {renderTaskList(todayTasks, "No tasks for today")}
           </Paper>
         </Grid>
 
@@ -282,57 +280,16 @@ function Tasks() {
             <Typography variant="h6" gutterBottom>
               Upcoming Tasks
             </Typography>
-            <List>
-              <AnimatePresence>
-                {upcomingTasks.length > 0 ? (
-                  upcomingTasks.map((task) => (
-                    <motion.div
-                      key={task.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <ListItem>
-                        <ListItemText
-                          primary={task.title}
-                          secondary={
-                            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                              <Chip
-                                size="small"
-                                label={`${task.startTime} - ${task.endTime}`}
-                                icon={<AccessTimeIcon />}
-                              />
-                              <Chip
-                                size="small"
-                                label={formatDate(task.dueDate)}
-                                color="primary"
-                              />
-                            </Box>
-                          }
-                        />
-                        <ListItemSecondaryAction>
-                          <IconButton
-                            edge="end"
-                            onClick={() => handleToggleTask(task.id)}
-                            color={task.completed ? 'success' : 'default'}
-                          >
-                            <CheckCircleIcon />
-                          </IconButton>
-                          <IconButton edge="end" onClick={() => handleDeleteTask(task.id)}>
-                            <DeleteIcon />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                    </motion.div>
-                  ))
-                ) : (
-                  <ListItem>
-                    <ListItemText primary="No upcoming tasks" />
-                  </ListItem>
-                )}
-              </AnimatePresence>
-            </List>
+            {renderTaskList(upcomingTasks, "No upcoming tasks")}
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Completed Tasks
+            </Typography>
+            {renderTaskList(completedTasks, "No completed tasks")}
           </Paper>
         </Grid>
       </Grid>

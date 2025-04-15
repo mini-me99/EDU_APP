@@ -6,22 +6,16 @@ import {
   Grid,
   Card,
   CardContent,
-  CardActions,
-  Button,
   LinearProgress,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
-  Divider,
-  ListItemSecondaryAction,
-  IconButton,
 } from '@mui/material';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import TimerIcon from '@mui/icons-material/Timer';
-import DeleteIcon from '@mui/icons-material/Delete';
 import { format, isToday, isAfter, parseISO, isValid } from 'date-fns';
 
 interface Task {
@@ -35,46 +29,27 @@ interface Task {
 
 function Dashboard() {
   const [tasks, setTasks] = useState<Task[]>(() => {
-    const storedTasks = localStorage.getItem('tasks');
-    if (storedTasks) {
-      try {
-        return JSON.parse(storedTasks);
-      } catch (error) {
-        console.error('Error parsing tasks from localStorage:', error);
-        return [];
-      }
+    try {
+      const storedTasks = localStorage.getItem('tasks');
+      return storedTasks ? JSON.parse(storedTasks) : [];
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+      return [];
     }
-    return [];
   });
+
   const [studyTime, setStudyTime] = useState<number>(0);
 
   useEffect(() => {
-    const storedTasks = localStorage.getItem('tasks');
     const storedStudyTime = localStorage.getItem('studyTime');
-    
-    if (storedTasks) {
-      try {
-        const parsedTasks = JSON.parse(storedTasks);
-        setTasks(parsedTasks);
-      } catch (error) {
-        console.error('Error parsing tasks from localStorage:', error);
-        setTasks([]);
-      }
-    }
-    
     if (storedStudyTime) {
       try {
         setStudyTime(parseInt(storedStudyTime, 10));
       } catch (error) {
-        console.error('Error parsing study time from localStorage:', error);
-        setStudyTime(0);
+        console.error('Error parsing study time:', error);
       }
     }
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem('studyTime', studyTime.toString());
-  }, [studyTime]);
 
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
@@ -84,7 +59,7 @@ function Dashboard() {
       const taskDate = parseISO(task.dueDate);
       return isValid(taskDate) && format(taskDate, 'yyyy-MM-dd') === todayStr && !task.completed;
     } catch (error) {
-      console.error('Invalid date format:', task.dueDate);
+      console.error('Error checking task date:', error);
       return false;
     }
   });
@@ -94,7 +69,7 @@ function Dashboard() {
       const taskDate = parseISO(task.dueDate);
       return isValid(taskDate) && format(taskDate, 'yyyy-MM-dd') > todayStr && !task.completed;
     } catch (error) {
-      console.error('Invalid date format:', task.dueDate);
+      console.error('Error checking task date:', error);
       return false;
     }
   });
@@ -104,52 +79,6 @@ function Dashboard() {
     ? Math.round((completedTasks.length / tasks.length) * 100) 
     : 0;
 
-  const handleDeleteTask = (id: string) => {
-    setTasks(tasks.filter(task => task.id !== id));
-  };
-
-  const handleCompleteTask = (id: string) => {
-    setTasks(tasks.map(task => {
-      if (task.id === id) {
-        return {
-          ...task,
-          completed: true,
-          completedAt: new Date().toISOString()
-        };
-      }
-      return task;
-    }));
-  };
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = parseISO(dateString);
-      if (!isValid(date)) {
-        return 'Invalid date';
-      }
-      return format(date, 'MMM dd, yyyy');
-    } catch (error) {
-      console.error('Error formatting date:', dateString);
-      return 'Invalid date';
-    }
-  };
-
-  // Clean up invalid tasks
-  useEffect(() => {
-    const validTasks = tasks.filter(task => {
-      try {
-        const date = parseISO(task.createdAt);
-        return isValid(date);
-      } catch (error) {
-        return false;
-      }
-    });
-    
-    if (validTasks.length !== tasks.length) {
-      setTasks(validTasks);
-    }
-  }, [tasks]);
-
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" component="h1" gutterBottom>
@@ -158,83 +87,64 @@ function Dashboard() {
 
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Today's Tasks
-            </Typography>
-            <Typography variant="h4">
-              {todayTasks.length}
-            </Typography>
-          </Paper>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Today's Tasks
+              </Typography>
+              <Typography variant="h4">
+                {todayTasks.length}
+              </Typography>
+            </CardContent>
+          </Card>
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Task Completion
-            </Typography>
-            <Typography variant="h4">
-              {taskCompletionRate}%
-            </Typography>
-          </Paper>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Task Completion
+              </Typography>
+              <Typography variant="h4">
+                {taskCompletionRate}%
+              </Typography>
+              <LinearProgress 
+                variant="determinate" 
+                value={taskCompletionRate} 
+                sx={{ mt: 1 }}
+              />
+            </CardContent>
+          </Card>
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Study Time
-            </Typography>
-            <Typography variant="h4">
-              {Math.floor(studyTime / 60)}h {studyTime % 60}m
-            </Typography>
-          </Paper>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Study Time
+              </Typography>
+              <Typography variant="h4">
+                {Math.floor(studyTime / 60)}h {studyTime % 60}m
+              </Typography>
+            </CardContent>
+          </Card>
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Upcoming Deadlines
-            </Typography>
-            <Typography variant="h4">
-              {upcomingTasks.length}
-            </Typography>
-          </Paper>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Upcoming Deadlines
+              </Typography>
+              <Typography variant="h4">
+                {upcomingTasks.length}
+              </Typography>
+            </CardContent>
+          </Card>
         </Grid>
       </Grid>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Today's Tasks
-            </Typography>
-            <List>
-              {todayTasks.length > 0 ? (
-                todayTasks.map((task) => (
-                  <ListItem key={task.id}>
-                    <ListItemText
-                      primary={task.title}
-                      secondary={`Due: ${formatDate(task.dueDate)}`}
-                    />
-                    <ListItemSecondaryAction>
-                      <IconButton 
-                        edge="end" 
-                        onClick={() => handleCompleteTask(task.id)}
-                        color="primary"
-                      >
-                        <CheckCircleIcon />
-                      </IconButton>
-                      <IconButton edge="end" onClick={() => handleDeleteTask(task.id)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                ))
-              ) : (
-                <ListItem>
-                  <ListItemText primary="No tasks for today" />
-                </ListItem>
-              )}
-            </List>
-          </Paper>
-        </Grid>
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
@@ -251,12 +161,52 @@ function Dashboard() {
                 .slice(0, 5)
                 .map((task) => (
                   <ListItem key={task.id}>
+                    <ListItemIcon>
+                      <CheckCircleIcon color="success" />
+                    </ListItemIcon>
                     <ListItemText
                       primary={task.title}
-                      secondary={`Completed on ${formatDate(task.completedAt || task.createdAt)}`}
+                      secondary={`Completed on ${format(new Date(task.completedAt || task.createdAt), 'MMM dd, yyyy')}`}
                     />
                   </ListItem>
                 ))}
+            </List>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Quick Stats
+            </Typography>
+            <List>
+              <ListItem>
+                <ListItemIcon>
+                  <PendingActionsIcon />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Total Tasks"
+                  secondary={tasks.length}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <CheckCircleIcon color="success" />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Completed Tasks"
+                  secondary={completedTasks.length}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <TimerIcon />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Average Study Time"
+                  secondary={`${Math.floor(studyTime / 60)} hours per day`}
+                />
+              </ListItem>
             </List>
           </Paper>
         </Grid>
