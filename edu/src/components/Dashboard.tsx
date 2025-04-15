@@ -14,52 +14,141 @@ import {
   ListItemText,
   ListItemIcon,
   Divider,
+  ListItemSecondaryAction,
+  IconButton,
 } from '@mui/material';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import TimerIcon from '@mui/icons-material/Timer';
-import { format } from 'date-fns';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { format, isToday, isAfter, parseISO, isValid } from 'date-fns';
 
 interface Task {
-  id: number;
+  id: string;
   title: string;
-  dueDate: Date;
+  dueDate: string;
   completed: boolean;
-  createdAt: Date;
+  createdAt: string;
+  completedAt?: string;
 }
 
 function Dashboard() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [studyTime, setStudyTime] = useState(0);
-
-  useEffect(() => {
-    // Load tasks from localStorage
+  const [tasks, setTasks] = useState<Task[]>(() => {
     const storedTasks = localStorage.getItem('tasks');
     if (storedTasks) {
-      const parsedTasks = JSON.parse(storedTasks).map((task: any) => ({
-        ...task,
-        dueDate: new Date(task.dueDate),
-        createdAt: new Date(task.createdAt),
-      }));
-      setTasks(parsedTasks);
+      try {
+        return JSON.parse(storedTasks);
+      } catch (error) {
+        console.error('Error parsing tasks from localStorage:', error);
+        return [];
+      }
     }
-    // Load study time from localStorage
+    return [];
+  });
+  const [studyTime, setStudyTime] = useState<number>(0);
+
+  useEffect(() => {
+    const storedTasks = localStorage.getItem('tasks');
     const storedStudyTime = localStorage.getItem('studyTime');
+    
+    if (storedTasks) {
+      try {
+        const parsedTasks = JSON.parse(storedTasks);
+        setTasks(parsedTasks);
+      } catch (error) {
+        console.error('Error parsing tasks from localStorage:', error);
+        setTasks([]);
+      }
+    }
+    
     if (storedStudyTime) {
-      setStudyTime(parseInt(storedStudyTime));
+      try {
+        setStudyTime(parseInt(storedStudyTime, 10));
+      } catch (error) {
+        console.error('Error parsing study time from localStorage:', error);
+        setStudyTime(0);
+      }
     }
   }, []);
 
-  const upcomingTasks = tasks.filter((task) => !task.completed);
-  const completedTasks = tasks.filter((task) => task.completed);
-  const todayTasks = upcomingTasks.filter(
-    (task) => format(task.dueDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
-  );
+  useEffect(() => {
+    localStorage.setItem('studyTime', studyTime.toString());
+  }, [studyTime]);
 
-  const completionRate = tasks.length
-    ? Math.round((completedTasks.length / tasks.length) * 100)
+  const today = new Date();
+  const todayStr = format(today, 'yyyy-MM-dd');
+
+  const todayTasks = tasks.filter(task => {
+    try {
+      const taskDate = parseISO(task.dueDate);
+      return isValid(taskDate) && format(taskDate, 'yyyy-MM-dd') === todayStr && !task.completed;
+    } catch (error) {
+      console.error('Invalid date format:', task.dueDate);
+      return false;
+    }
+  });
+
+  const upcomingTasks = tasks.filter(task => {
+    try {
+      const taskDate = parseISO(task.dueDate);
+      return isValid(taskDate) && format(taskDate, 'yyyy-MM-dd') > todayStr && !task.completed;
+    } catch (error) {
+      console.error('Invalid date format:', task.dueDate);
+      return false;
+    }
+  });
+
+  const completedTasks = tasks.filter(task => task.completed);
+  const taskCompletionRate = tasks.length > 0 
+    ? Math.round((completedTasks.length / tasks.length) * 100) 
     : 0;
+
+  const handleDeleteTask = (id: string) => {
+    setTasks(tasks.filter(task => task.id !== id));
+  };
+
+  const handleCompleteTask = (id: string) => {
+    setTasks(tasks.map(task => {
+      if (task.id === id) {
+        return {
+          ...task,
+          completed: true,
+          completedAt: new Date().toISOString()
+        };
+      }
+      return task;
+    }));
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      const date = parseISO(dateString);
+      if (!isValid(date)) {
+        return 'Invalid date';
+      }
+      return format(date, 'MMM dd, yyyy');
+    } catch (error) {
+      console.error('Error formatting date:', dateString);
+      return 'Invalid date';
+    }
+  };
+
+  // Clean up invalid tasks
+  useEffect(() => {
+    const validTasks = tasks.filter(task => {
+      try {
+        const date = parseISO(task.createdAt);
+        return isValid(date);
+      } catch (error) {
+        return false;
+      }
+    });
+    
+    if (validTasks.length !== tasks.length) {
+      setTasks(validTasks);
+    }
+  }, [tasks]);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -67,184 +156,107 @@ function Dashboard() {
         Welcome to Edu AI Pro
       </Typography>
 
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Today's Tasks
+            </Typography>
+            <Typography variant="h4">
+              {todayTasks.length}
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Task Completion
+            </Typography>
+            <Typography variant="h4">
+              {taskCompletionRate}%
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Study Time
+            </Typography>
+            <Typography variant="h4">
+              {Math.floor(studyTime / 60)}h {studyTime % 60}m
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Upcoming Deadlines
+            </Typography>
+            <Typography variant="h4">
+              {upcomingTasks.length}
+            </Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
       <Grid container spacing={3}>
-        {/* Statistics Cards */}
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Today's Tasks
-              </Typography>
-              <Typography variant="h4" component="div">
-                {todayTasks.length}
-              </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={(todayTasks.length / (todayTasks.length + 1)) * 100}
-                sx={{ mt: 2 }}
-              />
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Task Completion
-              </Typography>
-              <Typography variant="h4" component="div">
-                {completionRate}%
-              </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={completionRate}
-                sx={{ mt: 2 }}
-              />
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Study Time Today
-              </Typography>
-              <Typography variant="h4" component="div">
-                {Math.floor(studyTime / 3600)}h {Math.floor((studyTime % 3600) / 60)}m
-              </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={(studyTime / 28800) * 100} // 8 hours target
-                sx={{ mt: 2 }}
-              />
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Upcoming Deadlines
-              </Typography>
-              <Typography variant="h4" component="div">
-                {upcomingTasks.length}
-              </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={(upcomingTasks.length / (upcomingTasks.length + 1)) * 100}
-                sx={{ mt: 2 }}
-              />
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Today's Tasks */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Today's Tasks
             </Typography>
             <List>
-              {todayTasks.length === 0 ? (
+              {todayTasks.length > 0 ? (
+                todayTasks.map((task) => (
+                  <ListItem key={task.id}>
+                    <ListItemText
+                      primary={task.title}
+                      secondary={`Due: ${formatDate(task.dueDate)}`}
+                    />
+                    <ListItemSecondaryAction>
+                      <IconButton 
+                        edge="end" 
+                        onClick={() => handleCompleteTask(task.id)}
+                        color="primary"
+                      >
+                        <CheckCircleIcon />
+                      </IconButton>
+                      <IconButton edge="end" onClick={() => handleDeleteTask(task.id)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))
+              ) : (
                 <ListItem>
                   <ListItemText primary="No tasks for today" />
                 </ListItem>
-              ) : (
-                todayTasks.map((task) => (
-                  <ListItem key={task.id}>
-                    <ListItemIcon>
-                      <PendingActionsIcon color="primary" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={task.title}
-                      secondary={`Due: ${format(task.dueDate, 'h:mm a')}`}
-                    />
-                  </ListItem>
-                ))
               )}
             </List>
           </Paper>
         </Grid>
-
-        {/* Quick Actions */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Quick Actions
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <Button
-                  fullWidth
-                  variant="contained"
-                  startIcon={<AccessTimeIcon />}
-                  href="/tasks"
-                >
-                  Add Task
-                </Button>
-              </Grid>
-              <Grid item xs={6}>
-                <Button
-                  fullWidth
-                  variant="contained"
-                  startIcon={<TimerIcon />}
-                  href="/stopwatch"
-                >
-                  Start Timer
-                </Button>
-              </Grid>
-              <Grid item xs={6}>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  startIcon={<CheckCircleIcon />}
-                  href="/tasks"
-                >
-                  View Tasks
-                </Button>
-              </Grid>
-              <Grid item xs={6}>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  startIcon={<PendingActionsIcon />}
-                  href="/calendar"
-                >
-                  View Calendar
-                </Button>
-              </Grid>
-            </Grid>
-          </Paper>
-        </Grid>
-
-        {/* Recent Activity */}
-        <Grid item xs={12}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Recent Activity
             </Typography>
             <List>
-              {tasks.slice(0, 5).map((task) => (
-                <ListItem key={task.id}>
-                  <ListItemIcon>
-                    {task.completed ? (
-                      <CheckCircleIcon color="success" />
-                    ) : (
-                      <PendingActionsIcon color="primary" />
-                    )}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={task.title}
-                    secondary={`${task.completed ? 'Completed' : 'Created'} on ${format(
-                      task.completed ? task.createdAt : task.dueDate,
-                      'MMM d, yyyy'
-                    )}`}
-                  />
-                </ListItem>
-              ))}
+              {tasks
+                .filter(task => task.completed)
+                .sort((a, b) => {
+                  const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+                  const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+                  return dateB - dateA;
+                })
+                .slice(0, 5)
+                .map((task) => (
+                  <ListItem key={task.id}>
+                    <ListItemText
+                      primary={task.title}
+                      secondary={`Completed on ${formatDate(task.completedAt || task.createdAt)}`}
+                    />
+                  </ListItem>
+                ))}
             </List>
           </Paper>
         </Grid>

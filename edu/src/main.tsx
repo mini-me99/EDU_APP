@@ -1,36 +1,11 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import { ThemeProvider, createTheme } from '@mui/material'
-import { LocalizationProvider } from '@mui/x-date-pickers'
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
-import { ToastContainer } from 'react-toastify'
-import 'react-toastify/dist/ReactToastify.css'
 import App from './App'
 import './index.css'
 
 // Debug logging
 console.log('Starting application initialization...');
-
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#2196f3',
-    },
-    secondary: {
-      main: '#f50057',
-    },
-  },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-        },
-      },
-    },
-  },
-})
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
@@ -88,24 +63,9 @@ console.log('Rendering application...');
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <ThemeProvider theme={theme}>
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
-          <BrowserRouter>
-            <App />
-            <ToastContainer 
-              position="bottom-right"
-              autoClose={5000}
-              hideProgressBar={false}
-              newestOnTop
-              closeOnClick
-              rtl={false}
-              pauseOnFocusLoss
-              draggable
-              pauseOnHover
-            />
-          </BrowserRouter>
-        </LocalizationProvider>
-      </ThemeProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
     </ErrorBoundary>
   </React.StrictMode>,
 )

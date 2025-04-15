@@ -14,26 +14,28 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  ListItemSecondaryAction,
+  IconButton,
 } from '@mui/material';
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import EventIcon from '@mui/icons-material/Event';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { format, isSameDay } from 'date-fns';
 
 interface Task {
-  id: number;
+  id: string;
   title: string;
-  dueDate: string; // Store as ISO string
+  dueDate: string;
   completed: boolean;
-  createdAt: string; // Store as ISO string
 }
 
 interface Event {
-  id: number;
+  id: string;
   title: string;
-  date: string; // Store as ISO string
+  date: string;
   description: string;
 }
 
@@ -44,69 +46,67 @@ function Calendar() {
   const [openDialog, setOpenDialog] = useState(false);
   const [newEvent, setNewEvent] = useState({
     title: '',
-    description: '',
-    date: selectedDate,
+    date: format(new Date(), 'yyyy-MM-dd'),
+    description: ''
   });
 
   useEffect(() => {
-    try {
-      // Load tasks from localStorage
-      const storedTasks = localStorage.getItem('tasks');
-      if (storedTasks) {
+    const storedTasks = localStorage.getItem('tasks');
+    const storedEvents = localStorage.getItem('events');
+    
+    if (storedTasks) {
+      try {
         const parsedTasks = JSON.parse(storedTasks);
         setTasks(parsedTasks);
+      } catch (error) {
+        console.error('Error parsing tasks from localStorage:', error);
+        setTasks([]);
       }
-
-      // Load events from localStorage
-      const storedEvents = localStorage.getItem('events');
-      if (storedEvents) {
+    }
+    
+    if (storedEvents) {
+      try {
         const parsedEvents = JSON.parse(storedEvents);
         setEvents(parsedEvents);
+      } catch (error) {
+        console.error('Error parsing events from localStorage:', error);
+        setEvents([]);
       }
-    } catch (error) {
-      console.error('Error loading data from localStorage:', error);
-      localStorage.removeItem('tasks');
-      localStorage.removeItem('events');
     }
   }, []);
 
-  // Save events to localStorage whenever they change
   useEffect(() => {
-    try {
-      localStorage.setItem('events', JSON.stringify(events));
-    } catch (error) {
-      console.error('Error saving events to localStorage:', error);
-    }
+    localStorage.setItem('events', JSON.stringify(events));
   }, [events]);
 
   const handleDateChange = (date: Date | null) => {
     if (date) {
       setSelectedDate(date);
+      setNewEvent(prev => ({ ...prev, date: format(date, 'yyyy-MM-dd') }));
     }
   };
 
   const handleAddEvent = () => {
     if (newEvent.title.trim()) {
       const event: Event = {
-        id: Date.now(),
+        id: Date.now().toString(),
         title: newEvent.title.trim(),
-        description: newEvent.description.trim(),
-        date: newEvent.date.toISOString(),
+        date: newEvent.date,
+        description: newEvent.description.trim()
       };
-      const updatedEvents = [...events, event];
-      setEvents(updatedEvents);
+      setEvents([...events, event]);
+      setNewEvent({ title: '', date: format(new Date(), 'yyyy-MM-dd'), description: '' });
       setOpenDialog(false);
-      setNewEvent({ title: '', description: '', date: selectedDate });
     }
   };
 
-  const tasksForSelectedDate = tasks.filter((task) =>
-    isSameDay(new Date(task.dueDate), selectedDate)
-  );
+  const handleDeleteEvent = (id: string) => {
+    setEvents(events.filter(event => event.id !== id));
+  };
 
-  const eventsForSelectedDate = events.filter((event) =>
-    isSameDay(new Date(event.date), selectedDate)
-  );
+  const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
+  const selectedDateTasks = tasks.filter((task: Task) => task.dueDate === selectedDateStr && !task.completed);
+  const selectedDateEvents = events.filter((event: Event) => event.date === selectedDateStr);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -118,10 +118,11 @@ function Calendar() {
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 2 }}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
-              <DateCalendar
+              <DatePicker
+                label="Select Date"
                 value={selectedDate}
                 onChange={handleDateChange}
-                sx={{ width: '100%' }}
+                slotProps={{ textField: { fullWidth: true, sx: { mb: 3 } } }}
               />
             </LocalizationProvider>
           </Paper>
@@ -146,19 +147,16 @@ function Calendar() {
               Tasks
             </Typography>
             <List>
-              {tasksForSelectedDate.length === 0 ? (
+              {selectedDateTasks.length === 0 ? (
                 <ListItem>
                   <ListItemText primary="No tasks for this date" />
                 </ListItem>
               ) : (
-                tasksForSelectedDate.map((task) => (
+                selectedDateTasks.map((task) => (
                   <ListItem key={task.id}>
-                    <ListItemIcon>
-                      <EventIcon color={task.completed ? 'success' : 'primary'} />
-                    </ListItemIcon>
                     <ListItemText
                       primary={task.title}
-                      secondary={`Due: ${format(new Date(task.dueDate), 'h:mm a')}`}
+                      secondary={`Due: ${format(new Date(task.dueDate), 'MMM dd, yyyy')}`}
                     />
                   </ListItem>
                 ))
@@ -169,20 +167,22 @@ function Calendar() {
               Events
             </Typography>
             <List>
-              {eventsForSelectedDate.length === 0 ? (
+              {selectedDateEvents.length === 0 ? (
                 <ListItem>
                   <ListItemText primary="No events for this date" />
                 </ListItem>
               ) : (
-                eventsForSelectedDate.map((event) => (
+                selectedDateEvents.map((event) => (
                   <ListItem key={event.id}>
-                    <ListItemIcon>
-                      <EventIcon color="secondary" />
-                    </ListItemIcon>
                     <ListItemText
                       primary={event.title}
                       secondary={event.description}
                     />
+                    <ListItemSecondaryAction>
+                      <IconButton edge="end" onClick={() => handleDeleteEvent(event.id)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </ListItemSecondaryAction>
                   </ListItem>
                 ))
               )}
@@ -200,9 +200,7 @@ function Calendar() {
             label="Event Title"
             fullWidth
             value={newEvent.title}
-            onChange={(e) =>
-              setNewEvent({ ...newEvent, title: e.target.value })
-            }
+            onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
           />
           <TextField
             margin="dense"
@@ -211,15 +209,13 @@ function Calendar() {
             multiline
             rows={4}
             value={newEvent.description}
-            onChange={(e) =>
-              setNewEvent({ ...newEvent, description: e.target.value })
-            }
+            onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
           <Button onClick={handleAddEvent} variant="contained">
-            Add
+            Add Event
           </Button>
         </DialogActions>
       </Dialog>

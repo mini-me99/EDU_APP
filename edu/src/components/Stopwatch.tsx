@@ -4,244 +4,436 @@ import {
   Typography,
   Paper,
   Button,
-  Grid,
   TextField,
+  Alert,
   Tabs,
   Tab,
-  Alert,
+  CircularProgress,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  IconButton,
+  Grid,
+  Chip,
+  Divider,
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
-import ReplayIcon from '@mui/icons-material/Replay';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import TimerIcon from '@mui/icons-material/Timer';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+import LinkIcon from '@mui/icons-material/Link';
+import StopIcon from '@mui/icons-material/Stop';
+import SendIcon from '@mui/icons-material/Send';
+import { format } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
+interface StudySession {
+  id: string;
+  text: string;
+  startTime: number;
+  endTime: number | null;
+  duration: number;
 }
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
+interface ExamLink {
+  id: string;
+  title: string;
+  url: string;
+  description: string;
+}
 
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`simple-tabpanel-${index}`}
-      aria-labelledby={`simple-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  );
+interface Message {
+  id: string;
+  text: string;
+  sender: 'user' | 'ai';
+  timestamp: number;
 }
 
 function Stopwatch() {
+  const [activeTab, setActiveTab] = useState(0);
   const [time, setTime] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const [tabValue, setTabValue] = useState(0);
-  const [timerMinutes, setTimerMinutes] = useState(25);
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [timerActive, setTimerActive] = useState(false);
-  const [showAlert, setShowAlert] = useState(false);
+  const [isActive, setIsActive] = useState(false);
+  const [currentSession, setCurrentSession] = useState<StudySession | null>(null);
+  const [newText, setNewText] = useState('');
+  const [examLinks, setExamLinks] = useState<ExamLink[]>([]);
+  const [newLink, setNewLink] = useState({
+    title: '',
+    url: '',
+    description: ''
+  });
+  const [countdownMinutes, setCountdownMinutes] = useState(0);
+  const [countdownSeconds, setCountdownSeconds] = useState(0);
+  const [countdownActive, setCountdownActive] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Stopwatch functionality
+  // Load exam links from localStorage
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isRunning) {
-      interval = setInterval(() => {
-        setTime((prevTime) => prevTime + 10);
-      }, 10);
+    const storedLinks = localStorage.getItem('examLinks');
+    if (storedLinks) {
+      try {
+        setExamLinks(JSON.parse(storedLinks));
+      } catch (error) {
+        console.error('Error parsing exam links:', error);
+      }
     }
-    return () => clearInterval(interval);
-  }, [isRunning]);
+  }, []);
 
-  // Timer functionality
+  // Save exam links to localStorage
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (timerActive && (timerMinutes > 0 || timerSeconds > 0)) {
+    localStorage.setItem('examLinks', JSON.stringify(examLinks));
+  }, [examLinks]);
+
+  // Timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+
+    if (isActive) {
       interval = setInterval(() => {
-        if (timerSeconds === 0) {
-          setTimerMinutes((prev) => prev - 1);
-          setTimerSeconds(59);
+        setTime((time) => time + 1);
+      }, 1000);
+    } else if (!isActive && time !== 0) {
+      if (interval) clearInterval(interval);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isActive, time]);
+
+  // Countdown effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+
+    if (countdownActive && (countdownMinutes > 0 || countdownSeconds > 0)) {
+      interval = setInterval(() => {
+        if (countdownSeconds > 0) {
+          setCountdownSeconds((prev) => prev - 1);
+        } else if (countdownMinutes > 0) {
+          setCountdownMinutes((prev) => prev - 1);
+          setCountdownSeconds(59);
         } else {
-          setTimerSeconds((prev) => prev - 1);
+          setCountdownActive(false);
+          alert('Countdown finished!');
         }
       }, 1000);
-    } else if (timerActive && timerMinutes === 0 && timerSeconds === 0) {
-      setShowAlert(true);
-      setTimerActive(false);
     }
-    return () => clearInterval(interval);
-  }, [timerActive, timerMinutes, timerSeconds]);
 
-  const formatTime = (time: number) => {
-    const hours = Math.floor(time / 3600000);
-    const minutes = Math.floor((time % 3600000) / 60000);
-    const seconds = Math.floor((time % 60000) / 1000);
-    const milliseconds = Math.floor((time % 1000) / 10);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [countdownActive, countdownMinutes, countdownSeconds]);
 
-    return `${hours.toString().padStart(2, '0')}:${minutes
-      .toString()
-      .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds
-      .toString()
-      .padStart(2, '0')}`;
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  const handleStartStop = () => {
+    if (activeTab === 0) {
+      if (!isActive && !currentSession) {
+        // Start new session
+        const session: StudySession = {
+          id: Date.now().toString(),
+          text: newText,
+          startTime: Date.now(),
+          endTime: null,
+          duration: 0
+        };
+        setCurrentSession(session);
+        setNewText('');
+        setTime(0); // Reset timer when starting new session
+      } else if (isActive && currentSession) {
+        // End current session
+        const endTime = Date.now();
+        const duration = Math.floor((endTime - currentSession.startTime) / 1000);
+        const updatedSession = {
+          ...currentSession,
+          endTime,
+          duration
+        };
+        setCurrentSession(null);
+        
+        // Update study time in localStorage
+        const studyTime = localStorage.getItem('studyTime');
+        const totalStudyTime = studyTime ? parseInt(studyTime) + time : time;
+        localStorage.setItem('studyTime', totalStudyTime.toString());
+      }
+      setIsActive(!isActive);
+    } else {
+      setCountdownActive(!countdownActive);
+    }
   };
 
-  const handleTimerStart = () => {
-    setTimerActive(true);
+  const handleReset = () => {
+    if (activeTab === 0) {
+      if (isActive && currentSession) {
+        // Save current session time before resetting
+        const endTime = Date.now();
+        const duration = Math.floor((endTime - currentSession.startTime) / 1000);
+        const studyTime = localStorage.getItem('studyTime');
+        const totalStudyTime = studyTime ? parseInt(studyTime) + time : time;
+        localStorage.setItem('studyTime', totalStudyTime.toString());
+      }
+      setTime(0);
+      setIsActive(false);
+      setCurrentSession(null);
+    } else {
+      setCountdownMinutes(0);
+      setCountdownSeconds(0);
+      setCountdownActive(false);
+    }
   };
 
-  const handleTimerPause = () => {
-    setTimerActive(false);
+  const handleAddLink = () => {
+    if (newLink.title && newLink.url) {
+      const link: ExamLink = {
+        id: Date.now().toString(),
+        title: newLink.title,
+        url: newLink.url,
+        description: newLink.description
+      };
+      setExamLinks([...examLinks, link]);
+      setNewLink({ title: '', url: '', description: '' });
+    }
   };
 
-  const handleTimerReset = () => {
-    setTimerMinutes(25);
-    setTimerSeconds(0);
-    setTimerActive(false);
+  const handleDeleteLink = (id: string) => {
+    setExamLinks(examLinks.filter(link => link.id !== id));
   };
 
-  const saveStudyTime = () => {
-    const storedTime = localStorage.getItem('studyTime') || '0';
-    const totalTime = parseInt(storedTime) + Math.floor(time / 1000);
-    localStorage.setItem('studyTime', totalTime.toString());
-    setTime(0);
-    setIsRunning(false);
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: newMessage.trim(),
+      sender: 'user',
+      timestamp: Date.now()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setNewMessage('');
+    setIsLoading(true);
+
+    try {
+      // Simulate AI response (replace with actual AI API call)
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: `I'm an AI assistant. You asked: "${userMessage.text}". I can help you with your studies, answer questions, and provide guidance.`,
+        sender: 'ai',
+        timestamp: Date.now()
+      };
+
+      setTimeout(() => {
+        setMessages(prev => [...prev, aiResponse]);
+        setIsLoading(false);
+      }, 1000);
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      setIsLoading(false);
+    }
   };
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Time Management
+      <Typography variant="h4" gutterBottom>
+        Stopwatch
       </Typography>
 
-      <Paper sx={{ width: '100%' }}>
-        <Tabs
-          value={tabValue}
-          onChange={handleTabChange}
-          centered
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
-        >
-          <Tab icon={<AccessTimeIcon />} label="Stopwatch" />
-          <Tab icon={<TimerIcon />} label="Timer" />
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
+          <Tab label="Stopwatch" />
+          <Tab label="Countdown" />
         </Tabs>
 
-        <TabPanel value={tabValue} index={0}>
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="h2" component="div" sx={{ mb: 4 }}>
+        {activeTab === 0 ? (
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="h2" align="center" gutterBottom>
               {formatTime(time)}
             </Typography>
-            <Grid container spacing={2} justifyContent="center">
-              <Grid item>
-                <Button
-                  variant="contained"
-                  color={isRunning ? 'secondary' : 'primary'}
-                  startIcon={isRunning ? <PauseIcon /> : <PlayArrowIcon />}
-                  onClick={() => setIsRunning(!isRunning)}
-                  sx={{ minWidth: 120 }}
-                >
-                  {isRunning ? 'Pause' : 'Start'}
-                </Button>
-              </Grid>
-              <Grid item>
-                <Button
-                  variant="outlined"
-                  startIcon={<ReplayIcon />}
-                  onClick={() => {
-                    setTime(0);
-                    setIsRunning(false);
-                  }}
-                  sx={{ minWidth: 120 }}
-                >
-                  Reset
-                </Button>
-              </Grid>
-              <Grid item>
-                <Button
-                  variant="contained"
-                  color="success"
-                  onClick={saveStudyTime}
-                  disabled={time === 0}
-                  sx={{ minWidth: 120 }}
-                >
-                  Save Time
-                </Button>
-              </Grid>
-            </Grid>
-          </Box>
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={1}>
-          <Box sx={{ textAlign: 'center' }}>
-            {showAlert && (
-              <Alert
-                severity="success"
-                onClose={() => setShowAlert(false)}
-                sx={{ mb: 2 }}
+            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 3 }}>
+              <Button
+                variant="contained"
+                startIcon={isActive ? <PauseIcon /> : <PlayArrowIcon />}
+                onClick={handleStartStop}
               >
-                Timer completed! Take a short break.
-              </Alert>
+                {isActive ? 'Pause' : 'Start'}
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<StopIcon />}
+                onClick={handleReset}
+                disabled={!isActive && time === 0}
+              >
+                Reset
+              </Button>
+            </Box>
+            {!isActive && !currentSession && (
+              <TextField
+                fullWidth
+                label="What are you studying?"
+                value={newText}
+                onChange={(e) => setNewText(e.target.value)}
+                sx={{ mb: 2 }}
+              />
             )}
-            <Typography variant="h2" component="div" sx={{ mb: 4 }}>
-              {`${timerMinutes.toString().padStart(2, '0')}:${timerSeconds
-                .toString()
-                .padStart(2, '0')}`}
+            {currentSession && (
+              <Typography variant="body1" align="center">
+                Current Session: {currentSession.text}
+              </Typography>
+            )}
+          </Box>
+        ) : (
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="h2" align="center" gutterBottom>
+              {`${countdownMinutes.toString().padStart(2, '0')}:${countdownSeconds.toString().padStart(2, '0')}`}
             </Typography>
-            <Grid container spacing={2} justifyContent="center">
-              <Grid item xs={12} sm={4}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 3 }}>
+              <TextField
+                type="number"
+                label="Minutes"
+                value={countdownMinutes}
+                onChange={(e) => setCountdownMinutes(parseInt(e.target.value) || 0)}
+                disabled={countdownActive}
+                sx={{ width: 100 }}
+              />
+              <TextField
+                type="number"
+                label="Seconds"
+                value={countdownSeconds}
+                onChange={(e) => setCountdownSeconds(parseInt(e.target.value) || 0)}
+                disabled={countdownActive}
+                sx={{ width: 100 }}
+              />
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+              <Button
+                variant="contained"
+                startIcon={countdownActive ? <PauseIcon /> : <PlayArrowIcon />}
+                onClick={handleStartStop}
+                disabled={countdownMinutes === 0 && countdownSeconds === 0}
+              >
+                {countdownActive ? 'Pause' : 'Start'}
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<StopIcon />}
+                onClick={handleReset}
+                disabled={!countdownActive && countdownMinutes === 0 && countdownSeconds === 0}
+              >
+                Reset
+              </Button>
+            </Box>
+          </Box>
+        )}
+      </Paper>
+
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6}>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Add Exam Link
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <TextField
                   fullWidth
-                  label="Minutes"
-                  type="number"
-                  value={timerMinutes}
-                  onChange={(e) => setTimerMinutes(parseInt(e.target.value) || 0)}
-                  disabled={timerActive}
+                  label="Title"
+                  value={newLink.title}
+                  onChange={(e) => setNewLink({ ...newLink, title: e.target.value })}
                 />
-              </Grid>
-              <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Seconds"
-                  type="number"
-                  value={timerSeconds}
-                  onChange={(e) => setTimerSeconds(parseInt(e.target.value) || 0)}
-                  disabled={timerActive}
+                  label="URL"
+                  value={newLink.url}
+                  onChange={(e) => setNewLink({ ...newLink, url: e.target.value })}
                 />
-              </Grid>
-            </Grid>
-            <Grid container spacing={2} justifyContent="center" sx={{ mt: 2 }}>
-              <Grid item>
+                <TextField
+                  fullWidth
+                  label="Description"
+                  value={newLink.description}
+                  onChange={(e) => setNewLink({ ...newLink, description: e.target.value })}
+                />
                 <Button
                   variant="contained"
-                  color={timerActive ? 'secondary' : 'primary'}
-                  startIcon={timerActive ? <PauseIcon /> : <PlayArrowIcon />}
-                  onClick={timerActive ? handleTimerPause : handleTimerStart}
-                  sx={{ minWidth: 120 }}
+                  onClick={handleAddLink}
+                  disabled={!newLink.title || !newLink.url}
                 >
-                  {timerActive ? 'Pause' : 'Start'}
+                  Add Link
                 </Button>
-              </Grid>
-              <Grid item>
-                <Button
-                  variant="outlined"
-                  startIcon={<ReplayIcon />}
-                  onClick={handleTimerReset}
-                  sx={{ minWidth: 120 }}
-                >
-                  Reset
-                </Button>
-              </Grid>
-            </Grid>
-          </Box>
-        </TabPanel>
-      </Paper>
+              </Box>
+            </Paper>
+          </motion.div>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+          >
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Exam Links
+              </Typography>
+              <List>
+                <AnimatePresence>
+                  {examLinks.length > 0 ? (
+                    examLinks.map((link) => (
+                      <motion.div
+                        key={link.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ListItem>
+                          <ListItemText
+                            primary={link.title}
+                            secondary={
+                              <>
+                                <Typography variant="body2" color="text.secondary">
+                                  {link.description}
+                                </Typography>
+                                <Typography variant="body2" color="primary">
+                                  <a href={link.url} target="_blank" rel="noopener noreferrer">
+                                    {link.url}
+                                  </a>
+                                </Typography>
+                              </>
+                            }
+                          />
+                          <ListItemSecondaryAction>
+                            <IconButton edge="end" onClick={() => handleDeleteLink(link.id)}>
+                              <DeleteIcon />
+                            </IconButton>
+                          </ListItemSecondaryAction>
+                        </ListItem>
+                      </motion.div>
+                    ))
+                  ) : (
+                    <ListItem>
+                      <ListItemText primary="No exam links added" />
+                    </ListItem>
+                  )}
+                </AnimatePresence>
+              </List>
+            </Paper>
+          </motion.div>
+        </Grid>
+      </Grid>
     </Box>
   );
 }

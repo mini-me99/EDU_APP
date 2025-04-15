@@ -1,5 +1,11 @@
 {
   "devDependencies": {
     "@types/node": "^22.14.1"
+  },
+  "dependencies": {
+    "@mui/x-date-pickers": "^7.28.3",
+    "date-fns": "^4.1.0",
+    "framer-motion": "^12.7.2",
+    "openai": "^4.94.0"
   }
 }
